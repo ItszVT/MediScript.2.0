@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block title %}Try MediScript — no sign-in{% endblock %}
+{% set is_chemist = (role == 'chemist') %}
+{% block header %}
+<header class="top">
+  <div class="brand"><a href="/" style="color:inherit;text-decoration:none"><span class="rx">℞</span> MediScript</a>
+    <small>· {{ 'chemist' if is_chemist else 'user' }} demo</small></div>
+  <div class="right"><a class="btn ghost sm" href="/register?role={{ role }}">Create free {{ 'pharmacy' if is_chemist else '' }} account</a></div>
+</header>
+<!-- persistent free-uses banner -->
+<div class="demobar" id="demobar">
+  <span class="quota" id="quotaText">Loading your free demo…</span>
+  <span class="chip" id="chipUp">℞ read: —</span>
+  <span class="chip" id="chipSe">search: —</span>
+  <span class="spacer"></span>
+  <a class="btn sm" href="/register?role={{ role }}">Sign up free →</a>
+</div>
+{% endblock %}
+{% block content %}
+<p class="eyebrow">Free demo · no account needed</p>
+<h1>{{ 'Pharmacy demo' if is_chemist else 'Try it once, right now' }}</h1>
+<p class="muted">Read one prescription and run one medicine search — no sign-up.
+  {% if is_chemist %}Sign up as a pharmacy to check scripts against your live inventory,
+  manage stock, and see demand.{% else %}Create a free account for unlimited use,
+  your history, and analytics.{% endif %}</p>
+
+<div class="grid cols-2" style="margin-top:16px;align-items:start">
+  <!-- Upload -->
+  <div class="card">
+    <p class="eyebrow">1 · Read a prescription</p>
+    <div class="drop" id="drop">
+      <input id="file" type="file" accept="image/*" hidden>
+      <div id="dropEmpty"><div class="rxbig">℞</div><b>Drop an image or click</b>
+        <div class="muted" style="font-size:13px">PNG / JPG</div></div>
+      <div class="scanwrap" id="pw" style="display:none">
+        <img id="preview" alt="preview"><div class="scanline" id="scan" style="display:none"></div></div>
+    </div>
+    <button class="btn block" id="runBtn" style="margin-top:12px" disabled>Read prescription (free)</button>
+    <div id="upResult" style="margin-top:12px"></div>
+  </div>
+
+  <!-- Search -->
+  <div class="card">
+    <p class="eyebrow">2 · Search a medicine</p>
+    <div style="display:flex;gap:10px">
+      <input id="q" type="text" placeholder="e.g. Dolo 650, Augmentin" style="flex:1" autocomplete="off">
+      <button class="btn" id="go">Search (free)</button>
+    </div>
+    <div id="seResult" style="margin-top:12px"></div>
+  </div>
+</div>
+
+<div class="card center" id="cta" style="margin-top:20px;display:none">
+  <h3 style="margin-top:0">Enjoying it? Keep going free</h3>
+  <p class="muted">{% if is_chemist %}Register your pharmacy for unlimited reads, inventory,
+    demand &amp; recalls.{% else %}Create an account for unlimited reads &amp; searches, your
+    history, and saved analytics.{% endif %}</p>
+  <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+    {% if is_chemist %}
+      <a class="btn" style="background:var(--amber)" href="/register?role=chemist">Register a pharmacy →</a>
+      <a class="btn ghost" href="/register?role=user">Create a patient account</a>
+    {% else %}
+      <a class="btn" href="/register?role=user">Create patient account →</a>
+      <a class="btn ghost" href="/register?role=chemist">Register a pharmacy</a>
+    {% endif %}
+    <a class="btn ghost" href="/login?role={{ role }}">Sign in</a>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const ROLE="{{ role }}";
+const drop=document.getElementById("drop"),file=document.getElementById("file"),preview=document.getElementById("preview"),
+  pw=document.getElementById("pw"),dropEmpty=document.getElementById("dropEmpty"),scan=document.getElementById("scan"),
+  runBtn=document.getElementById("runBtn"),upResult=document.getElementById("upResult"),
+  q=document.getElementById("q"),go=document.getElementById("go"),seResult=document.getElementById("seResult"),
+  cta=document.getElementById("cta"),
+  quotaText=document.getElementById("quotaText"),chipUp=document.getElementById("chipUp"),chipSe=document.getElementById("chipSe");
+let currentFile=null;
+
+// remember which portal was tried, so sign-in/up returns to the right flow
+try{ localStorage.setItem("ms_demo_role", ROLE); }catch(e){}
+
+async function refreshQuota(){
+  try{ const s=await MS.get("/api/guest/status");
+    chipUp.textContent="℞ read: "+s.uploads_left+" left";
+    chipSe.textContent="search: "+s.searches_left+" left";
+    chipUp.classList.toggle("spent", s.uploads_left<=0);
+    chipSe.classList.toggle("spent", s.searches_left<=0);
+    if(s.uploads_left<=0 && s.searches_left<=0){
+      quotaText.innerHTML="You've used your free demo — <b>sign up free</b> to keep going.";
+      showCTA();
+    } else {
+      quotaText.innerHTML=`Free demo — <b>${s.uploads_left}</b> prescription read and <b>${s.searches_left}</b> search remaining.`;
+    }
+    if(s.uploads_left<=0) runBtn.disabled=true;
+    if(s.searches_left<=0) go.disabled=true;
+  }catch(e){}
+}
+function showCTA(){ if(cta.style.display!=="block"){ cta.style.display="block"; cta.scrollIntoView({behavior:"smooth",block:"nearest"}); } }
+
+drop.addEventListener("click",()=>{ if(!runBtn.disabled||!currentFile) file.click(); });
+drop.addEventListener("dragover",e=>{e.preventDefault();drop.classList.add("drag");});
+drop.addEventListener("dragleave",()=>drop.classList.remove("drag"));
+drop.addEventListener("drop",e=>{e.preventDefault();drop.classList.remove("drag");if(e.dataTransfer.files[0])load(e.dataTransfer.files[0]);});
+file.addEventListener("change",e=>{if(e.target.files[0])load(e.target.files[0]);});
+function load(f){currentFile=f;preview.src=URL.createObjectURL(f);pw.style.display="block";dropEmpty.style.display="none";runBtn.disabled=false;}
+
+runBtn.addEventListener("click", async ()=>{
+  if(!currentFile) return;
+  runBtn.disabled=true; runBtn.innerHTML='<span class="spinner"></span> Reading…'; scan.style.display="block"; upResult.innerHTML="";
+  try{
+    const fd=new FormData(); fd.append("file",currentFile);
+    const d=await (await fetch("/api/guest/upload",{method:"POST",body:fd})).json();
+    if(d.limit_reached){ upResult.innerHTML=`<div class="diag warn">${d.message}</div>`; showCTA(); }
+    else renderUpload(d);
+  }catch(err){ MS.flash(err.message||"Failed."); }
+  scan.style.display="none"; runBtn.textContent="Read prescription (free)"; refreshQuota();
+});
+function renderUpload(d){
+  let html="";
+  if(d.matches&&d.matches.length){
+    html+=`<b>Matched medicines</b>`+d.matches.map(m=>`
+      <div class="match"><span class="name">${MS.esc(m.name)}</span><span class="pct">${m.score}%</span>
+      <div class="bar"><i style="width:${m.score}%"></i></div></div>`).join("");
+  } else { html+=`<b>No database match</b>`; }
+  if(d.diagnostics&&d.diagnostics.length) html+=`<div class="diag info" style="margin-top:8px"><ul>`+d.diagnostics.map(x=>`<li>${x}</li>`).join("")+`</ul></div>`;
+  html+=`<p class="muted" style="font-size:12px;margin:10px 0 4px">Raw extracted text</p><div class="raw">${MS.esc(d.raw_text||"(none)")}</div>`;
+  upResult.innerHTML=html;
+}
+
+async function runSearch(){
+  const val=q.value.trim(); if(!val) return;
+  seResult.innerHTML='<span class="spinner"></span> Searching…';
+  try{
+    const d=await MS.get("/api/guest/search?q="+encodeURIComponent(val));
+    if(d.limit_reached){ seResult.innerHTML=`<div class="diag warn">${d.message}</div>`; showCTA(); refreshQuota(); return; }
+    if(!d.results||!d.results.length){ seResult.innerHTML='<span class="muted">No matches. Try another name.</span>'; }
+    else {
+      seResult.innerHTML='<b>Ranked matches — pick the correct one</b>'+d.results.slice(0,6).map(r=>{
+        const cls=r.similarity>=85?'ok':r.similarity>=65?'warn':'bad';
+        return `<div class="match"><span class="name">${MS.esc(r.name)} <span class="badge ${cls}">${r.similarity>=85?'strong':r.similarity>=65?'possible':'verify'}</span></span><span class="pct">${r.similarity}%</span><div class="bar"><i style="width:${Math.min(100,r.similarity)}%"></i></div></div>`;
+      }).join("")+`<p class="muted" style="font-size:12px;margin-top:8px">Sign in to see composition, uses, warnings and where to buy.</p>`;
+    }
+  }catch(err){ seResult.innerHTML='<span class="muted">'+MS.esc(err.message)+'</span>'; }
+  refreshQuota();
+}
+go.addEventListener("click", runSearch);
+q.addEventListener("keydown", e=>{ if(e.key==="Enter") runSearch(); });
+refreshQuota();
+</script>
+{% endblock %}

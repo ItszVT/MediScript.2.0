@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+{% from "chemist/_nav.html" import chemistnav %}
+{% block title %}Inventory — MediScript{% endblock %}
+{% block bodyclass %}chemist{% endblock %}
+{% block portaltag %}<small>· chemist</small>{% endblock %}
+{% block nav %}{{ chemistnav('inventory') }}{% endblock %}
+{% block head %}
+<style>
+  .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:12px}
+  @media(max-width:900px){.kpis{grid-template-columns:repeat(3,1fr)}}
+  @media(max-width:560px){.kpis{grid-template-columns:repeat(2,1fr)}}
+  .kpi{border:1px solid var(--line);border-radius:14px;padding:14px;background:var(--card)}
+  .kpi .n{font-family:"Fraunces",serif;font-size:26px;line-height:1}
+  .kpi .l{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin-top:6px}
+  .kpi.alert{border-color:var(--coral);background:color-mix(in srgb,var(--coral) 8%,var(--card))}
+  .kpi.warn{border-color:var(--amber);background:color-mix(in srgb,var(--amber) 8%,var(--card))}
+  .kpi.good{border-color:var(--mint)}
+  .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:16px 0}
+  .toolbar input[type=text]{flex:1;min-width:200px}
+  .chip{cursor:pointer;font-size:12px;padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--ink)}
+  .chip.active{background:var(--pen);color:#fff;border-color:var(--pen)}
+  .invtable{width:100%;border-collapse:collapse;font-size:14px}
+  .invtable th{text-align:left;padding:10px;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);cursor:pointer;white-space:nowrap;border-bottom:1px solid var(--line)}
+  .invtable td{padding:10px;border-bottom:1px solid var(--line);vertical-align:middle}
+  .invtable tr:hover td{background:color-mix(in srgb,var(--pen) 4%,transparent)}
+  .qty{display:inline-flex;align-items:center;gap:6px}
+  .qty button{width:26px;height:26px;border-radius:7px;border:1px solid var(--line);background:var(--card);cursor:pointer;font-weight:700;line-height:1}
+  .qty button:hover{background:var(--pen);color:#fff;border-color:var(--pen)}
+  .qty .v{min-width:28px;text-align:center;font-family:"IBM Plex Mono",monospace}
+  .exp-red{color:var(--coral);font-weight:600}.exp-amber{color:var(--amber);font-weight:600}
+  .rowbtn{border:none;background:none;cursor:pointer;font-size:15px;padding:4px;border-radius:6px}
+  .rowbtn:hover{background:var(--paper-2)}
+  .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;place-items:center;z-index:50}
+  .modal-bg.show{display:grid}
+  .modal{background:var(--card);border-radius:16px;padding:22px;width:min(520px,92vw);max-height:90vh;overflow:auto}
+  .modal .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .modal label{font-size:12px;color:var(--muted);display:block;margin-bottom:3px}
+</style>
+{% endblock %}
+{% block content %}
+<div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:10px">
+  <div><p class="eyebrow">Inventory</p><h1 style="margin:0">Stock control</h1></div>
+  <div style="display:flex;gap:8px;flex-wrap:wrap">
+    <button class="btn" id="addBtn">＋ Add medicine</button>
+    <label class="btn ghost" style="cursor:pointer">Import CSV<input id="csv" type="file" accept=".csv" hidden></label>
+    <button class="btn ghost" id="clearDemo">Clear demo rows</button>
+  </div>
+</div>
+
+<div class="kpis" id="kpis" style="margin-top:16px"></div>
+
+<div id="reorder"></div>
+
+<div class="toolbar">
+  <input type="text" id="search" placeholder="🔍 Search medicine, brand or supplier…" autocomplete="off">
+  <span class="chip active" data-f="all">All</span>
+  <span class="chip" data-f="in">In stock</span>
+  <span class="chip" data-f="low">Low</span>
+  <span class="chip" data-f="out">Out</span>
+  <span class="chip" data-f="expiring">Expiring</span>
+  <span class="chip" data-f="expired">Expired</span>
+</div>
+
+<div class="card" style="padding:6px 10px">
+  <table class="invtable">
+    <thead><tr>
+      <th data-s="name">Medicine ▾</th><th data-s="quantity">Qty</th><th data-s="price">Price</th>
+      <th data-s="value">Value</th><th data-s="rack_location">Rack</th><th data-s="expiry_date">Expiry</th>
+      <th data-s="supplier">Supplier</th><th>Status</th><th></th>
+    </tr></thead>
+    <tbody id="rows"><tr><td colspan="9" class="muted" style="padding:20px">Loading…</td></tr></tbody>
+  </table>
+</div>
+
+<!-- add/edit modal -->
+<div class="modal-bg" id="modalBg"><div class="modal">
+  <h2 id="mTitle" style="margin-top:0">Add medicine</h2>
+  <input type="hidden" id="mId">
+  <div class="grid2">
+    <div style="grid-column:1/-1"><label>Medicine name *</label><input type="text" id="mName"></div>
+    <div><label>Brand</label><input type="text" id="mBrand"></div>
+    <div><label>Quantity</label><input type="number" id="mQty" value="0"></div>
+    <div><label>Price (₹)</label><input type="number" step="0.01" id="mPrice"></div>
+    <div><label>Reorder level</label><input type="number" id="mReorder" value="10"></div>
+    <div><label>Rack location</label><input type="text" id="mRack"></div>
+    <div><label>Expiry date</label><input type="date" id="mExpiry"></div>
+    <div style="grid-column:1/-1"><label>Supplier</label><input type="text" id="mSupplier"></div>
+  </div>
+  <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:16px">
+    <button class="btn ghost" id="mCancel">Cancel</button>
+    <button class="btn" id="mSave">Save</button>
+  </div>
+</div></div>
+{% endblock %}
+{% block scripts %}
+<script>
+let ITEMS=[], FILTER="all", SORT={key:"name",dir:1}, Q="";
+const today=new Date(); today.setHours(0,0,0,0);
+const rows=document.getElementById("rows"), kpis=document.getElementById("kpis"), reorder=document.getElementById("reorder");
+
+function daysTo(d){ if(!d) return null; return Math.round((new Date(d)-today)/86400000); }
+function statusOf(i){ if(i.quantity<=0) return ["out","bad","Out"]; if(i.quantity<=i.reorder_level) return ["low","warn","Low"]; return ["in","ok","In stock"]; }
+
+async function loadInv(){
+  const d=await MS.get("/api/chemist/inventory");
+  ITEMS=d.items||[]; renderKpis(d.stats||{}); renderReorder(); render();
+}
+function renderKpis(s){
+  kpis.innerHTML=`
+    <div class="kpi"><div class="n">${s.total_items||0}</div><div class="l">Items</div></div>
+    <div class="kpi good"><div class="n">${s.in_stock||0}</div><div class="l">In stock</div></div>
+    <div class="kpi ${s.low_stock?'warn':''}"><div class="n">${s.low_stock||0}</div><div class="l">Low stock</div></div>
+    <div class="kpi ${s.out_of_stock?'alert':''}"><div class="n">${s.out_of_stock||0}</div><div class="l">Out of stock</div></div>
+    <div class="kpi ${s.near_expiry||s.expired?'warn':''}"><div class="n">${(s.near_expiry||0)+(s.expired||0)}</div><div class="l">Expiring ≤90d</div></div>
+    <div class="kpi"><div class="n">₹${(s.total_value||0).toLocaleString('en-IN')}</div><div class="l">Stock value</div></div>`;
+}
+function renderReorder(){
+  const need=ITEMS.filter(i=>i.quantity<=i.reorder_level);
+  if(!need.length){ reorder.innerHTML=""; return; }
+  reorder.innerHTML=`<div class="card" style="margin-top:14px;border-left:3px solid var(--amber)">
+    <p class="eyebrow" style="color:var(--amber)">Reorder suggestions (${need.length})</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">${need.map(i=>`<span class="tok">${MS.esc(i.name)} · ${i.quantity}/${i.reorder_level}</span>`).join("")}</div></div>`;
+}
+function render(){
+  let list=ITEMS.filter(i=>{
+    if(Q){ const s=(i.name+" "+i.brand+" "+i.supplier).toLowerCase(); if(!s.includes(Q)) return false; }
+    const dt=daysTo(i.expiry_date);
+    if(FILTER==="in") return i.quantity>i.reorder_level;
+    if(FILTER==="low") return i.quantity>0&&i.quantity<=i.reorder_level;
+    if(FILTER==="out") return i.quantity<=0;
+    if(FILTER==="expiring") return dt!=null&&dt>=0&&dt<=90;
+    if(FILTER==="expired") return dt!=null&&dt<0;
+    return true;
+  });
+  list.sort((a,b)=>{ let x,y;
+    if(SORT.key==="value"){ x=(a.price||0)*a.quantity; y=(b.price||0)*b.quantity; }
+    else if(SORT.key==="expiry_date"){ x=a.expiry_date||"9999"; y=b.expiry_date||"9999"; }
+    else { x=a[SORT.key]; y=b[SORT.key]; }
+    if(typeof x==="string"){ x=(x||"").toLowerCase(); y=(y||"").toLowerCase(); }
+    return (x>y?1:x<y?-1:0)*SORT.dir;
+  });
+  if(!list.length){ rows.innerHTML='<tr><td colspan="9" class="muted" style="padding:20px">No items match.</td></tr>'; return; }
+  rows.innerHTML=list.map(i=>{
+    const [,cls,label]=statusOf(i); const dt=daysTo(i.expiry_date);
+    const expCls=dt==null?"":dt<0?"exp-red":dt<=90?"exp-amber":"";
+    const expTxt=i.expiry_date?`${i.expiry_date}${dt<0?' (expired)':dt<=90?` (${dt}d)`:''}`:'—';
+    const val=i.price?('₹'+((i.price*i.quantity).toFixed(0))):'—';
+    return `<tr>
+      <td><b>${MS.esc(i.name)}</b>${i.brand?`<div class="muted" style="font-size:12px">${MS.esc(i.brand)}</div>`:''}${i.is_demo?' <span class="badge warn" style="font-size:9px">demo</span>':''}</td>
+      <td><span class="qty"><button data-id="${i.id}" data-d="-1">−</button><span class="v">${i.quantity}</span><button data-id="${i.id}" data-d="1">＋</button></span></td>
+      <td>${i.price!=null?'₹'+i.price:'—'}</td><td>${val}</td>
+      <td>${MS.esc(i.rack_location)||'—'}</td>
+      <td class="${expCls}">${MS.esc(expTxt)}</td>
+      <td>${MS.esc(i.supplier)||'—'}</td>
+      <td><span class="badge ${cls}">${label}</span></td>
+      <td style="white-space:nowrap"><button class="rowbtn edit" data-id="${i.id}" title="Edit">✏️</button><button class="rowbtn del" data-id="${i.id}" title="Delete">🗑️</button></td>
+    </tr>`;
+  }).join("");
+  rows.querySelectorAll(".qty button").forEach(b=>b.onclick=()=>adjust(+b.dataset.id,+b.dataset.d));
+  rows.querySelectorAll(".edit").forEach(b=>b.onclick=()=>openModal(ITEMS.find(x=>x.id==b.dataset.id)));
+  rows.querySelectorAll(".del").forEach(b=>b.onclick=()=>removeItem(+b.dataset.id));
+}
+async function adjust(id,d){ try{ await MS.patch(`/api/chemist/inventory/${id}`,{delta:d}); const it=ITEMS.find(x=>x.id==id); it.quantity=Math.max(0,it.quantity+d); render(); loadStats(); }catch(e){ MS.flash(e.message); } }
+async function loadStats(){ const d=await MS.get("/api/chemist/inventory"); renderKpis(d.stats||{}); renderReorder(); }
+async function removeItem(id){ if(!confirm("Delete this item?"))return; await MS.del(`/api/chemist/inventory/${id}`); ITEMS=ITEMS.filter(x=>x.id!=id); render(); loadStats(); }
+
+// search + filters + sort
+document.getElementById("search").oninput=e=>{ Q=e.target.value.trim().toLowerCase(); render(); };
+document.querySelectorAll(".chip").forEach(c=>c.onclick=()=>{ document.querySelectorAll(".chip").forEach(x=>x.classList.remove("active")); c.classList.add("active"); FILTER=c.dataset.f; render(); });
+document.querySelectorAll("th[data-s]").forEach(th=>th.onclick=()=>{ const k=th.dataset.s; SORT.dir=SORT.key===k?-SORT.dir:1; SORT.key=k; render(); });
+
+// modal add/edit
+const mbg=document.getElementById("modalBg");
+function openModal(item){
+  document.getElementById("mTitle").textContent=item?"Edit medicine":"Add medicine";
+  document.getElementById("mId").value=item?item.id:"";
+  document.getElementById("mName").value=item?item.name:"";
+  document.getElementById("mBrand").value=item?item.brand:"";
+  document.getElementById("mQty").value=item?item.quantity:0;
+  document.getElementById("mPrice").value=item&&item.price!=null?item.price:"";
+  document.getElementById("mReorder").value=item?item.reorder_level:10;
+  document.getElementById("mRack").value=item?item.rack_location:"";
+  document.getElementById("mExpiry").value=item&&item.expiry_date?item.expiry_date:"";
+  document.getElementById("mSupplier").value=item?item.supplier:"";
+  mbg.classList.add("show");
+}
+document.getElementById("addBtn").onclick=()=>openModal(null);
+document.getElementById("mCancel").onclick=()=>mbg.classList.remove("show");
+mbg.onclick=e=>{ if(e.target===mbg) mbg.classList.remove("show"); };
+document.getElementById("mSave").onclick=async()=>{
+  const id=document.getElementById("mId").value;
+  const name=document.getElementById("mName").value.trim();
+  if(!name){ MS.flash("Medicine name is required."); return; }
+  const payload={ name, brand:document.getElementById("mBrand").value.trim(),
+    quantity:+document.getElementById("mQty").value||0, price:document.getElementById("mPrice").value,
+    reorder_level:+document.getElementById("mReorder").value||10, rack_location:document.getElementById("mRack").value.trim(),
+    expiry_date:document.getElementById("mExpiry").value, supplier:document.getElementById("mSupplier").value.trim() };
+  try{
+    if(id){ await MS.patch(`/api/chemist/inventory/${id}`, payload); }
+    else{ const fd=new FormData(); Object.entries(payload).forEach(([k,v])=>fd.append(k,v)); await MS.post("/api/chemist/inventory", fd, true); }
+    mbg.classList.remove("show"); loadInv();
+  }catch(e){ MS.flash(e.message); }
+};
+
+// csv + clear demo
+document.getElementById("csv").onchange=async e=>{
+  const f=e.target.files[0]; if(!f)return;
+  const fd=new FormData(); fd.append("file",f);
+  try{ const r=await MS.post("/api/chemist/inventory/import",fd,true); MS.flash(`Imported ${r.imported} items.`); loadInv(); }
+  catch(err){ MS.flash(err.message); }
+};
+document.getElementById("clearDemo").onclick=async()=>{ if(!confirm("Remove seeded demo rows?"))return; const r=await MS.post("/api/chemist/inventory/clear-demo",{}); MS.flash(`Removed ${r.removed} demo rows.`); loadInv(); };
+
+loadInv();
+</script>
+{% endblock %}

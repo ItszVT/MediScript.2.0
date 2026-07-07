@@ -1,0 +1,36 @@
+# ── MediScript — full application dependencies ───────────────────────────
+# All ship prebuilt wheels for Linux (Render) and Windows/Python 3.10+.
+fastapi>=0.110
+uvicorn[standard]>=0.29
+jinja2>=3.1
+python-multipart>=0.0.9
+email-validator>=2.1          # required by pydantic EmailStr
+
+# data / OCR / matching
+pandas>=2.0
+numpy>=1.24
+opencv-python-headless>=4.8
+rapidfuzz>=3.0
+requests>=2.31
+requests-cache>=1.1
+
+# database + auth
+sqlalchemy>=2.0
+psycopg2-binary>=2.9          # Postgres driver (Render). SQLite needs nothing.
+passlib[bcrypt]>=1.7.4
+bcrypt>=4.0,<4.1              # pinned: passlib 1.7.4 compatibility
+python-jose[cryptography]>=3.3
+pydantic>=2.6
+pydantic-settings>=2.2
+alembic>=1.13                 # database migrations
+
+# dev/test
+pytest>=8.0
+httpx>=0.27                   # FastAPI TestClient
+
+# ---- OPTIONAL: model-based medical NER (not installed by default) ----
+# The app works fully without these via its built-in heuristic detector.
+# To enable Med7 / scispaCy drug recognition, run scripts/enable_med7.sh
+# (or .ps1) and set DRUG_NER_MODEL in your environment.
+#   spacy>=3.7
+#   en_core_med7_lg  (via the wheel URL in scripts/enable_med7.sh)

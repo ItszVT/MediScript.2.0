@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}MediScript{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/style.css">
+  {% block head %}{% endblock %}
+</head>
+<body class="{% block bodyclass %}{% endblock %}">
+  {% block header %}
+  <header class="top">
+    <div class="brand"><span class="rx">℞</span> MediScript {% block portaltag %}{% endblock %}</div>
+    {% block nav %}{% endblock %}
+    <div class="right">
+      {% if user %}
+        <span class="pill">{{ user.full_name or user.email }}</span>
+        <button id="logoutBtn" class="btn ghost sm">Sign out</button>
+      {% endif %}
+    </div>
+  </header>
+  {% endblock %}
+  <main>{% block content %}{% endblock %}</main>
+  <script src="/static/js/app.js"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

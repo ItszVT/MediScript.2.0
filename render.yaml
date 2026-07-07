@@ -1,0 +1,27 @@
+# Render blueprint — deploys on the FREE tier with zero extra setup.
+#
+# One web service, SQLite storage (no database to provision), and the medicine
+# data ships in the repo so there's no heavy build step. Just:
+#   1. Push this repo to GitHub.
+#   2. In Render: New +  →  Blueprint  →  pick your repo.
+#   3. When prompted, paste your OCR.space API key into OCRSPACE_KEYS.
+#   4. Deploy. That's it.
+#
+# Note: the free tier's disk is ephemeral, so SQLite data resets when the
+# service sleeps/redeploys — fine for a demo/portfolio. For persistent data,
+# add a Render Postgres and set DATABASE_URL (see DEPLOY.md).
+services:
+  - type: web
+    name: mediscript
+    runtime: python
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    healthCheckPath: /health
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true          # Render generates a strong secret
+      - key: OCRSPACE_KEYS
+        sync: false                  # paste your OCR.space key in the dashboard
+      - key: PYTHON_VERSION
+        value: "3.11.9"

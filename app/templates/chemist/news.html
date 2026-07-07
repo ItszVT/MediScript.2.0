@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% from "chemist/_nav.html" import chemistnav %}
+{% block title %}News & recalls — MediScript{% endblock %}
+{% block bodyclass %}chemist{% endblock %}
+{% block portaltag %}<small>· chemist</small>{% endblock %}
+{% block nav %}{{ chemistnav('news') }}{% endblock %}
+{% block content %}
+<p class="eyebrow">Industry news &amp; drug recalls</p>
+<h1>What a pharmacy should watch</h1>
+<p class="muted">Regulatory news and <b>real drug recalls</b> from the U.S. FDA
+(openFDA enforcement data) — the kind of alerts that affect what you can safely
+dispense. Authoritative sources only.</p>
+
+<div class="grid cols-2" style="margin-top:16px;align-items:start">
+  <div class="card">
+    <p class="eyebrow">Active drug recalls · openFDA</p>
+    <div id="recalls"><span class="spinner"></span> Loading recalls…</div>
+  </div>
+  <div class="card">
+    <p class="eyebrow">Regulatory &amp; pharmacy news · FDA</p>
+    <div id="news"><span class="spinner"></span> Loading news…</div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+MS.get("/api/chemist/industry-news").then(d=>{
+  const r=d.recalls||[];
+  const cls=c=> c==='Class I'?'bad':c==='Class II'?'warn':'ok';
+  document.getElementById("recalls").innerHTML = r.length
+    ? r.map(x=>`<div style="padding:10px 0;border-bottom:1px solid var(--line)">
+        <b>${MS.esc(x.product)}</b> ${x.classification?`<span class="badge ${cls(x.classification)}">${MS.esc(x.classification)}</span>`:''}
+        <div class="muted" style="font-size:13px;margin-top:2px">${MS.esc(x.reason)}</div>
+        <div class="muted" style="font-size:12px;margin-top:2px">${MS.esc(x.company)} · ${MS.esc(x.date)}</div></div>`).join("")
+    : '<span class="muted">Recalls unavailable right now (openFDA needs outbound network). Populates on your deployed server.</span>';
+  const n=d.news||[];
+  document.getElementById("news").innerHTML = n.length
+    ? n.map(x=>`<div style="padding:10px 0;border-bottom:1px solid var(--line)">
+        <a href="${x.url}" target="_blank" rel="noopener"><b>${MS.esc(x.title)}</b></a>
+        <span class="badge ok" style="margin-left:6px">${MS.esc(x.source)}</span>
+        ${x.summary?`<div class="muted" style="font-size:13px;margin-top:2px">${MS.esc(x.summary)}</div>`:''}</div>`).join("")
+    : '<span class="muted">News unavailable right now. Populates on your deployed server.</span>';
+}).catch(()=>{
+  document.getElementById("recalls").innerHTML='<span class="muted">Unavailable right now.</span>';
+  document.getElementById("news").innerHTML='<span class="muted">Unavailable right now.</span>';
+});
+</script>
+{% endblock %}

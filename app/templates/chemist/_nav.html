@@ -1,0 +1,11 @@
+{% macro chemistnav(active) %}
+<nav class="nav">
+  <a href="/chemist" class="{{ 'active' if active=='home' }}">Dashboard</a>
+  <a href="/chemist/upload" class="{{ 'active' if active=='upload' }}">Dispense</a>
+  <a href="/chemist/inventory" class="{{ 'active' if active=='inventory' }}">Inventory</a>
+  <a href="/chemist/demand" class="{{ 'active' if active=='demand' }}">Demand</a>
+  <a href="/chemist/analytics" class="{{ 'active' if active=='analytics' }}">Analytics</a>
+  <a href="/chemist/news" class="{{ 'active' if active=='news' }}">News &amp; recalls</a>
+  <a href="/chemist/settings" class="{{ 'active' if active=='settings' }}">Settings</a>
+</nav>
+{% endmacro %}

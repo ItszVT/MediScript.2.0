@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+*.db
+*.sqlite
+medinfo_cache.sqlite
+.venv/
+venv/
+.env
+.pytest_cache/
+# (migrations/ IS committed — do not ignore)
+
+# user-added datasets (can be large); keep the folder + its README
+data/datasets/*
+!data/datasets/README.md

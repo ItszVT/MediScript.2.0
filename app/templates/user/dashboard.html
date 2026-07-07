@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% from "user/_nav.html" import usernav %}
+{% block title %}Dashboard — MediScript{% endblock %}
+{% block portaltag %}<small>· user</small>{% endblock %}
+{% block nav %}{{ usernav('home') }}{% endblock %}
+{% block content %}
+<p class="eyebrow">Welcome</p>
+<h1>Hello{{ ', ' + user.full_name if user.full_name else '' }} 👋</h1>
+<p class="muted">Digitise a prescription, look up a medicine, or review your history.</p>
+
+<div class="grid cols-3" style="margin-top:20px">
+  <a class="card" href="/app/upload" style="text-decoration:none;color:inherit">
+    <div class="rxbig" style="font-family:Fraunces,serif;font-size:40px;color:var(--pen)">℞</div>
+    <h3>Upload prescription</h3>
+    <p class="muted">Read handwriting with OCR.space Engine 3, match medicines, and confirm.</p>
+  </a>
+  <a class="card" href="/app/search" style="text-decoration:none;color:inherit">
+    <div class="rxbig" style="font-family:Fraunces,serif;font-size:40px;color:var(--mint)">🔍</div>
+    <h3>Search a medicine</h3>
+    <p class="muted">Uses, side effects, substitutes, warnings — from public data sources.</p>
+  </a>
+  <a class="card" href="/app/analytics" style="text-decoration:none;color:inherit">
+    <div class="rxbig" style="font-family:Fraunces,serif;font-size:40px;color:var(--amber)">📊</div>
+    <h3>My analytics</h3>
+    <p class="muted">Your scans, detections, accuracy over time and most-searched medicines.</p>
+  </a>
+</div>
+
+<div class="card" id="quickStats" style="margin-top:20px">
+  <p class="eyebrow">Your activity</p>
+  <div class="grid cols-4" id="statTiles"><span class="muted">Loading…</span></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+MS.get("/api/user/analytics").then(a=>{
+  document.getElementById("statTiles").innerHTML = `
+    <div class="stat"><div class="n">${a.prescriptions_scanned}</div><div class="l">Prescriptions scanned</div></div>
+    <div class="stat good"><div class="n">${a.medicines_detected}</div><div class="l">Medicines detected</div></div>
+    <div class="stat"><div class="n">${a.accuracy.accuracy ?? '—'}${a.accuracy.accuracy!=null?'%':''}</div><div class="l">Prediction accuracy</div></div>
+    <div class="stat"><div class="n">${a.most_searched.length}</div><div class="l">Distinct searches</div></div>`;
+});
+</script>
+{% endblock %}

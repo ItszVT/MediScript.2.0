@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% block title %}MediScript — read the prescription, know your medicine{% endblock %}
+{% block header %}
+<header class="top">
+  <div class="brand"><span class="rx">℞</span> MediScript</div>
+  <div class="right">
+    {% if user %}<a class="btn ghost sm" href="{{ '/chemist' if user.role=='chemist' else '/app' }}">Open my dashboard</a>
+    {% else %}<a class="btn ghost sm" href="/login">Sign in</a>{% endif %}
+  </div>
+</header>
+{% endblock %}
+
+{% block content %}
+<section class="hero">
+  <div class="rxmark">℞</div>
+  <p class="eyebrow" style="color:#bff3e2">AI prescription reader · medicine intelligence</p>
+  <h1>Read the <em>handwriting</em>.<br>Know your medicine.</h1>
+  <p>Snap a prescription and MediScript reads it, tells you what each medicine is for,
+     flags cheaper same-formula substitutes, and shows where to buy — in seconds.</p>
+  <div class="actions">
+    <a class="btn" href="/demo">Try it now — no sign-up →</a>
+    <a class="btn line" href="/register?role=user">Create free account</a>
+  </div>
+  <div class="stats-inline">
+    <div><b>5,300+</b><span>medicines matched</span></div>
+    <div><b>2 lakh+</b><span>Indian brands searchable</span></div>
+    <div><b>₹</b><span>generic savings finder</span></div>
+    <div><b>OCR.space</b><span>Engine 3 handwriting</span></div>
+  </div>
+</section>
+
+<section class="grid cols-2" style="margin-top:26px">
+  <div class="card portal-card">
+    <p class="eyebrow" style="color:var(--mint)">For patients</p>
+    <h2 style="font-size:26px;margin-top:2px">Continue as User</h2>
+    <p class="muted">Digitise prescriptions, understand each medicine, and find cheaper
+      equivalents and where to buy.</p>
+    <ul class="muted" style="font-size:14px;padding-left:18px;margin:10px 0 18px">
+      <li>Handwriting extraction with on-image detection boxes</li>
+      <li>What it's for, side effects &amp; <b>cheaper substitutes</b></li>
+      <li>Your personal scan &amp; search history</li>
+    </ul>
+    <a class="btn block" href="/login?role=user">Enter the User portal →</a>
+  </div>
+
+  <div class="card portal-card">
+    <p class="eyebrow" style="color:var(--amber)">For pharmacies</p>
+    <h2 style="font-size:26px;margin-top:2px">Continue as Chemist</h2>
+    <p class="muted">A pharmacy workspace: read scripts against live inventory, manage
+      stock &amp; expiry, and act on real demand and recalls.</p>
+    <ul class="muted" style="font-size:14px;padding-left:18px;margin:10px 0 18px">
+      <li>Dispensing view with live availability</li>
+      <li>Inventory management &amp; CSV import</li>
+      <li>Demand, restock &amp; FDA recall alerts</li>
+    </ul>
+    <a class="btn block" style="background:var(--amber)" href="/login?role=chemist">Enter the Chemist portal →</a>
+  </div>
+</section>
+
+<section class="grid cols-3" style="margin-top:20px">
+  <div class="card"><div style="font-size:26px">💊</div><h3 style="margin:.3em 0">Save money</h3>
+    <p class="muted" style="font-size:14px">See the price of a brand and the cheapest same-formula
+      alternative — often 80–95% less.</p></div>
+  <div class="card"><div style="font-size:26px">🔍</div><h3 style="margin:.3em 0">Understand it</h3>
+    <p class="muted" style="font-size:14px">Composition, uses, and side effects for the active
+      ingredient — from authoritative public sources.</p></div>
+  <div class="card"><div style="font-size:26px">📈</div><h3 style="margin:.3em 0">Stay informed</h3>
+    <p class="muted" style="font-size:14px">Real health news and, for pharmacies, live FDA drug
+      recall alerts.</p></div>
+</section>
+
+<p class="center muted" style="margin-top:26px;font-size:12px;max-width:640px;margin-inline:auto">
+  Educational tool — not for clinical use. Prices &amp; composition are from public datasets and can
+  change; availability comes only from a pharmacy's own inventory. Always confirm with a pharmacist.
+</p>
+{% endblock %}

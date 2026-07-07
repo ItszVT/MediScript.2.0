@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% from "user/_nav.html" import usernav %}
+{% block title %}Search medicine — MediScript{% endblock %}
+{% block portaltag %}<small>· user</small>{% endblock %}
+{% block nav %}{{ usernav('search') }}{% endblock %}
+{% block content %}
+<p class="eyebrow">Search</p>
+<h1>Look up a medicine</h1>
+<p class="muted">Type a name (brand or generic). We show ranked matches with a
+similarity score — <b>you pick the correct one</b>, then we fetch its details and
+where to buy. We never present a guess as fact.</p>
+
+<div class="card" style="margin-top:14px">
+  <div style="display:flex;gap:10px">
+    <input id="q" type="text" placeholder="e.g. Dolo 650, Augmentin, Pantoprazole" style="flex:1" autocomplete="off">
+    <button class="btn" id="go">Search</button>
+  </div>
+  <p class="muted" style="font-size:12px;margin:8px 0 0">
+    Health-safety note: matches are suggestions ranked by text similarity, not a
+    diagnosis. Confirm the exact medicine with your prescription or pharmacist.</p>
+</div>
+
+<div class="grid cols-2" style="margin-top:16px;align-items:start">
+  <div class="card">
+    <p class="eyebrow">Matches — pick the correct medicine</p>
+    <div id="candidates"><span class="muted">Results appear here, ranked by similarity.</span></div>
+    <div id="rxbox"></div>
+  </div>
+  <div class="card">
+    <p class="eyebrow">Details</p>
+    <div id="detail"><span class="muted">Select a match on the left to see composition,
+      uses, warnings and where to buy.</span></div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const q=document.getElementById("q"), cand=document.getElementById("candidates"),
+      rxbox=document.getElementById("rxbox"), detail=document.getElementById("detail");
+
+async function run(){
+  const val=q.value.trim(); if(!val) return;
+  cand.innerHTML='<span class="spinner"></span> Searching…'; rxbox.innerHTML=""; detail.innerHTML='<span class="muted">Select a match to see details.</span>';
+  try{
+    const d=await MS.get("/api/user/search?q="+encodeURIComponent(val));
+    if((!d.results||!d.results.length) && (!d.rxnorm||!d.rxnorm.length)){
+      cand.innerHTML='<span class="muted">No matches found. Check spelling, or add a dataset that includes this medicine (see data/datasets/).</span>'; return;
+    }
+    cand.innerHTML = d.results.map(r=>rowHTML(r.name, r.similarity, "dataset")).join("")
+      || '<span class="muted">No local dataset match.</span>';
+    if(d.rxnorm && d.rxnorm.length){
+      rxbox.innerHTML = '<p class="eyebrow" style="margin-top:16px">Authoritative matches · RxNorm</p>'
+        + d.rxnorm.map(r=>rowHTML(r.name, r.score, "rxnorm")).join("");
+    }
+    bindRows();
+  }catch(err){ cand.innerHTML='<span class="muted">'+MS.esc(err.message)+'</span>'; }
+}
+
+function rowHTML(name, score, src){
+  const cls = score>=85?'ok':score>=65?'warn':'bad';
+  return `<div class="match">
+    <span class="name">${MS.esc(name)} ${src==='rxnorm'?'<span class="badge ok">RxNorm</span>':''}</span>
+    <span class="pct">${score}%</span>
+    <div class="bar"><i style="width:${Math.min(100,score)}%"></i></div>
+    <div style="grid-column:1/-1"><button class="btn sm pick" data-name="${MS.esc(name)}">Select this →</button>
+      <span class="badge ${cls}" style="margin-left:6px">${score>=85?'strong match':score>=65?'possible':'weak — verify'}</span></div>
+  </div>`;
+}
+function bindRows(){
+  document.querySelectorAll(".pick").forEach(b=>b.addEventListener("click",()=>pick(b.dataset.name)));
+}
+
+async function pick(name){
+  detail.innerHTML='<span class="spinner"></span> Fetching details for '+MS.esc(name)+'…';
+  try{
+    const d=await MS.get("/api/user/medicine-info?name="+encodeURIComponent(name));
+    const i=d.info||{};
+    const field=(l,v)=> v?`<p style="margin:8px 0"><b>${l}:</b> <span class="muted">${MS.esc(v).slice(0,700)}</span></p>`:"";
+    const links=(d.buy_links||[]).map(l=>`<a class="btn ghost sm" href="${l.url}" target="_blank" rel="noopener">${l.pharmacy}</a>`).join(" ");
+    const srcBadge = (i.sources&&i.sources.length)
+      ? `<span class="badge ok">${i.sources.join(" · ")}</span>` : `<span class="badge warn">limited info</span>`;
+    // honest verification: only when RxNorm exactly matched the salt/name
+    const verified = i.verified_name
+      ? `<span class="badge ok" title="RxCUI ${i.rxcui}">✓ active ingredient verified</span>` : "";
+    // substitutes with prices
+    const subs = (i.substitutes&&i.substitutes.length)
+      ? `<p style="margin:12px 0 4px"><b>Same-formula substitutes</b> <span class="muted" style="font-weight:400">(cheapest first)</span></p>
+         <div>${i.substitutes.map(s=>`<span class="tok sub" data-name="${MS.esc(s.name)}" style="cursor:pointer">${MS.esc(s.name)}${s.price!=null?` · ₹${s.price}`:''}</span>`).join("")}</div>` : "";
+    // savings banner (standout)
+    const priceLine = i.price!=null ? `<span class="price-tag">₹${i.price}</span>` : "";
+    const saving = (i.savings && i.cheapest)
+      ? `<div class="saving"><div class="big">Save ${i.savings.percent}%</div>
+           <div class="sub">Same formula, cheaper: <b>${MS.esc(i.cheapest.name)}</b> at
+           <span class="price-tag">₹${i.cheapest.price}</span> <span class="price-old">₹${i.price}</span>
+           — you could save <b>₹${i.savings.amount}</b>.</div></div>` : "";
+
+    detail.innerHTML=`
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <h2 style="margin:0">${MS.esc(name)}</h2>${priceLine}${srcBadge}${verified}</div>
+      ${saving}
+      ${i.composition?`<p style="margin:8px 0"><b>What's in it:</b> <span class="mono">${MS.esc(i.composition)}</span></p>`
+        :'<p class="muted" style="font-size:13px">Composition not in dataset for this exact name.</p>'}
+      ${field("Used for", i.uses)}
+      ${field("Side effects", i.side_effects)}
+      ${field("Warnings", i.warnings)}
+      ${field("Interactions", i.interactions)}
+      ${(!i.uses && !i.side_effects)?`<div class="diag info" style="margin-top:8px;font-size:13px">
+          Detailed uses/side-effects come from public drug labels (openFDA), which cover the
+          <b>active ingredient</b>${i.salts&&i.salts.length?` — here <b>${MS.esc(i.salts.join(', '))}</b>`:''}.
+          If they're blank, the label service had no entry — please confirm with a pharmacist.</div>`:''}
+      ${subs}
+      <p style="margin:12px 0 4px"><b>Where to buy</b></p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">${links}</div>
+      <p class="muted" style="font-size:12px;margin-top:12px">Informational only, not medical
+        advice. Prices are from a public dataset and may differ in-store.</p>`;
+    detail.querySelectorAll(".sub").forEach(el=>el.addEventListener("click",()=>{
+      q.value=el.dataset.name; run(); }));
+    detail.scrollIntoView({behavior:"smooth",block:"nearest"});
+  }catch(err){ detail.innerHTML='<span class="muted">'+MS.esc(err.message)+'</span>'; }
+}
+
+document.getElementById("go").addEventListener("click", run);
+q.addEventListener("keydown", e=>{ if(e.key==="Enter") run(); });
+</script>
+{% endblock %}

@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% from "user/_nav.html" import usernav %}
+{% block title %}My analytics — MediScript{% endblock %}
+{% block portaltag %}<small>· user</small>{% endblock %}
+{% block nav %}{{ usernav('analytics') }}{% endblock %}
+{% block head %}<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>{% endblock %}
+{% block content %}
+<p class="eyebrow">Analytics · all-time</p>
+<h1>Your activity</h1>
+<p class="muted">Everything here is stored and accumulates across all your sessions.</p>
+
+<div class="grid cols-4" id="tiles" style="margin-top:16px"><span class="muted">Loading…</span></div>
+
+<div class="grid cols-2" style="margin-top:20px;align-items:start">
+  <div class="card">
+    <p class="eyebrow">Reading confidence</p>
+    <p class="muted" style="font-size:13px;margin-top:0">How sure the reader was across every medicine detected.</p>
+    <canvas id="conf" height="150"></canvas>
+    <p class="muted center" id="confEmpty" style="display:none">No detections yet.</p>
+  </div>
+  <div class="card">
+    <p class="eyebrow">Your most-detected medicines</p>
+    <div id="topMeds"></div>
+  </div>
+</div>
+
+<div class="grid cols-2" style="margin-top:20px;align-items:start">
+  <div class="card"><p class="eyebrow">Monthly scans</p><canvas id="monthly" height="150"></canvas>
+    <p class="muted" id="monthlyEmpty" style="display:none">No scans yet.</p></div>
+  <div class="card"><p class="eyebrow">Most searched</p><div id="searched"></div></div>
+</div>
+
+<div class="card" style="margin-top:20px"><p class="eyebrow">Recently detected</p>
+  <table><thead><tr><th>Medicine</th><th>Confidence</th></tr></thead><tbody id="recent"></tbody></table>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const teal="#0E5C63", mint="#3FA786", amber="#B4691F", coral="#C4453C";
+MS.get("/api/user/analytics").then(a=>{
+  const acc=a.accuracy||{};
+  document.getElementById("tiles").innerHTML=`
+    <div class="stat accent"><div class="n">${a.prescriptions_scanned}</div><div class="l">Prescriptions scanned</div></div>
+    <div class="stat"><div class="n">${a.medicines_detected}</div><div class="l">Medicines detected</div></div>
+    <div class="stat good"><div class="n">${a.avg_confidence??'—'}${a.avg_confidence!=null?'%':''}</div><div class="l">Avg reading confidence</div></div>
+    <div class="stat"><div class="n">${a.most_searched.length}</div><div class="l">Distinct searches</div></div>`;
+
+  const cd=a.confidence_distribution||{strong:0,possible:0,weak:0};
+  if(!(cd.strong+cd.possible+cd.weak)) document.getElementById("confEmpty").style.display="block";
+  else new Chart(document.getElementById("conf"),{type:"doughnut",
+    data:{labels:["Strong (85%+)","Possible (70–84%)","Weak (<70%)"],
+      datasets:[{data:[cd.strong,cd.possible,cd.weak],backgroundColor:[mint,amber,coral],borderWidth:0}]},
+    options:{plugins:{legend:{position:"bottom"}},cutout:"62%"}});
+
+  const tm=a.top_medicines||[];
+  document.getElementById("topMeds").innerHTML = tm.length
+    ? tm.map((x,i)=>`<div class="match"><span class="name">${i+1}. ${MS.esc(x.medicine||'—')}</span><span class="pct">${x.count}×</span>
+        <div class="bar"><i style="width:${Math.round(100*x.count/tm[0].count)}%"></i></div></div>`).join("")
+    : '<span class="muted">Scan a prescription to see your most-detected medicines.</span>';
+
+  const m=a.monthly_activity||[];
+  if(!m.length) document.getElementById("monthlyEmpty").style.display="block";
+  else new Chart(document.getElementById("monthly"),{type:"bar",
+    data:{labels:m.map(x=>x.month),datasets:[{data:m.map(x=>x.count),backgroundColor:teal,borderRadius:6}]},
+    options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{precision:0}}}}});
+
+  document.getElementById("searched").innerHTML = a.most_searched.length
+    ? a.most_searched.map(s=>`<div class="match"><span class="name">${MS.esc(s.query)}</span><span class="pct">${s.count}×</span></div>`).join("")
+    : '<span class="muted">No searches yet.</span>';
+
+  document.getElementById("recent").innerHTML = a.recent_medicines.length
+    ? a.recent_medicines.map(r=>`<tr><td>${MS.esc(r.medicine||'—')}</td><td><span class="badge ${r.confidence>=85?'ok':r.confidence>=70?'warn':'bad'}">${r.confidence}%</span></td></tr>`).join("")
+    : '<tr><td colspan="2" class="muted">Nothing yet — scan a prescription.</td></tr>';
+});
+</script>
+{% endblock %}

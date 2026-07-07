@@ -1,0 +1,10 @@
+{% macro usernav(active) %}
+<nav class="nav">
+  <a href="/app" class="{{ 'active' if active=='home' }}">Dashboard</a>
+  <a href="/app/upload" class="{{ 'active' if active=='upload' }}">Upload</a>
+  <a href="/app/search" class="{{ 'active' if active=='search' }}">Search</a>
+  <a href="/app/analytics" class="{{ 'active' if active=='analytics' }}">My analytics</a>
+  <a href="/app/trends" class="{{ 'active' if active=='trends' }}">Health trends</a>
+  <a href="/app/settings" class="{{ 'active' if active=='settings' }}">Settings</a>
+</nav>
+{% endmacro %}

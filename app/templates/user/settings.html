@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% from "user/_nav.html" import usernav %}
+{% block title %}Settings — MediScript{% endblock %}
+{% block portaltag %}<small>· user</small>{% endblock %}
+{% block nav %}{{ usernav('settings') }}{% endblock %}
+{% block content %}
+<p class="eyebrow">Settings</p>
+<h1>Account settings</h1>
+<div class="grid cols-2" style="margin-top:16px;align-items:start">
+  <div class="card">
+    <p class="eyebrow">Profile</p>
+    <p class="muted" style="font-size:13px">Signed in as <b id="s_email">…</b>
+      <span class="badge ok" id="s_role" style="margin-left:6px"></span></p>
+    <form id="profileForm">
+      <label>Full name</label>
+      <input id="s_full_name" type="text" placeholder="Your name">
+      <button class="btn" style="margin-top:16px">Save profile</button>
+    </form>
+  </div>
+  <div class="card">
+    <p class="eyebrow">Password</p>
+    <form id="passwordForm">
+      <label>Current password</label>
+      <input id="s_current" type="password" required>
+      <label>New password</label>
+      <input id="s_new" type="password" required minlength="6" placeholder="At least 6 characters">
+      <button class="btn" style="margin-top:16px">Change password</button>
+    </form>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="/static/js/settings.js"></script>{% endblock %}

@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+{% from "user/_nav.html" import usernav %}
+{% block title %}Read a prescription — MediScript{% endblock %}
+{% block portaltag %}<small>· user</small>{% endblock %}
+{% block nav %}{{ usernav('upload') }}{% endblock %}
+{% block head %}
+<style>
+  .imgwrap{position:relative;display:inline-block;max-width:100%}
+  .imgwrap img{display:block;max-width:100%;border-radius:10px;user-select:none;-webkit-user-drag:none}
+  .boxlayer{position:absolute;inset:0;pointer-events:none}
+  .detbox{position:absolute;border:2px solid var(--pen);border-radius:4px;
+    background:color-mix(in srgb,var(--pen) 10%,transparent);transition:.15s}
+  .detbox.ok{border-color:var(--mint);background:color-mix(in srgb,var(--mint) 16%,transparent)}
+  .detbox.warn{border-color:var(--amber);background:color-mix(in srgb,var(--amber) 14%,transparent)}
+  .detbox.bad{border-color:var(--coral);background:color-mix(in srgb,var(--coral) 12%,transparent)}
+  .detbox.active{box-shadow:0 0 0 3px var(--mint)}
+  .detbox .tag{position:absolute;top:-9px;left:-2px;font:600 10px/1 "IBM Plex Mono",monospace;
+    background:var(--pen);color:#fff;padding:2px 5px;border-radius:5px}
+  .medcard{border:1px solid var(--line);border-left:3px solid var(--line);border-radius:12px;padding:14px;margin-bottom:12px;background:var(--card)}
+  .medcard.ok{border-left-color:var(--mint)} .medcard.warn{border-left-color:var(--amber)} .medcard.bad{border-left-color:var(--coral)}
+  .medcard .top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .medcard h3{margin:0;font-size:19px}
+  .stepbanner{background:var(--pen-soft);border:1px solid color-mix(in srgb,var(--pen) 22%,transparent);
+    border-radius:12px;padding:12px 14px;font-size:14px;margin-bottom:12px}
+  .stepbanner b{color:var(--pen-deep)}
+  .alts summary{cursor:pointer;font-size:13px;color:var(--pen);font-weight:600;margin-top:6px}
+</style>
+{% endblock %}
+{% block content %}
+<p class="eyebrow">Read a prescription</p>
+<h1>Point at the medicines</h1>
+<p class="muted">Prescriptions have a lot of other text (hospital name, patient, vitals).
+So instead of guessing the whole page, <b>you draw a box around each medicine name</b> and we
+read just that — more accurate, and honest when the handwriting is unclear.</p>
+
+<div class="grid cols-2" style="margin-top:16px;align-items:start">
+  <div class="card">
+    <div class="drop" id="drop">
+      <input id="file" type="file" accept="image/*" hidden>
+      <div id="dropEmpty">
+        <div class="rxbig">℞</div>
+        <b>Drop a prescription photo or click</b>
+        <div class="muted" style="font-size:13px">PNG / JPG</div>
+      </div>
+      <div class="imgwrap" id="imgwrap" style="display:none">
+        <img id="preview" alt="preview">
+        <div class="boxlayer" id="boxlayer"></div>
+      </div>
+    </div>
+    <div id="controls" style="display:none;margin-top:12px">
+      <div class="stepbanner">✏️ <b>Draw a box</b> around a medicine name. Draw one box per medicine.</div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn ghost sm" id="resetBtn">Start over</button>
+        <button class="btn ghost sm" id="newImgBtn">Upload different image</button>
+        <button class="btn ghost sm" id="wholeBtn">Read whole page instead</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <p class="eyebrow">Medicines you've marked</p>
+    <p class="muted" id="resultsEmpty">Upload a prescription, then draw a box over the first medicine.</p>
+    <div id="resultsBody"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const drop=document.getElementById("drop"), file=document.getElementById("file"),
+  preview=document.getElementById("preview"), imgwrap=document.getElementById("imgwrap"),
+  boxlayer=document.getElementById("boxlayer"), dropEmpty=document.getElementById("dropEmpty"),
+  controls=document.getElementById("controls"), resultsEmpty=document.getElementById("resultsEmpty"),
+  resultsBody=document.getElementById("resultsBody");
+let currentFile=null, imageId=null, prescriptionId=null, imgW=0, imgH=0, regionCount=0, drawing=false;
+
+drop.addEventListener("click", ()=>{ if(!imageId) file.click(); });
+drop.addEventListener("dragover", e=>{e.preventDefault();drop.classList.add("drag");});
+drop.addEventListener("dragleave", ()=>drop.classList.remove("drag"));
+drop.addEventListener("drop", e=>{e.preventDefault();drop.classList.remove("drag"); if(e.dataTransfer.files[0]) load(e.dataTransfer.files[0]);});
+file.addEventListener("change", e=>{ if(e.target.files[0]) load(e.target.files[0]); });
+document.getElementById("newImgBtn").addEventListener("click", ()=>file.click());
+document.getElementById("resetBtn").addEventListener("click", ()=>{ boxlayer.innerHTML=""; regionCount=0; resultsBody.innerHTML=""; resultsEmpty.style.display="block"; });
+
+async function load(f){
+  if(!f.type.startsWith("image/")){ MS.flash("Please choose an image file."); return; }
+  currentFile=f; preview.src=URL.createObjectURL(f);
+  imgwrap.style.display="inline-block"; dropEmpty.style.display="none"; boxlayer.innerHTML="";
+  regionCount=0; resultsBody.innerHTML=""; resultsEmpty.style.display="block";
+  resultsEmpty.textContent="Preparing image…";
+  try{
+    const fd=new FormData(); fd.append("file", f);
+    const d=await MS.post("/api/user/prepare-image", fd, true);
+    imageId=d.image_id; prescriptionId=d.prescription_id; imgW=d.image_width; imgH=d.image_height;
+    controls.style.display="block"; preview.style.cursor="crosshair";
+    resultsEmpty.textContent="Draw a box over the first medicine name.";
+  }catch(err){ MS.flash(err.message); resultsEmpty.textContent="Couldn't prepare the image."; }
+}
+
+// draw a box → read that region
+preview.addEventListener("mousedown", e=>{
+  if(!imageId) return; e.preventDefault(); drawing=true;
+  const r=preview.getBoundingClientRect();
+  const sx=(e.clientX-r.left)/r.width, sy=(e.clientY-r.top)/r.height;
+  const el=document.createElement("div"); el.className="detbox";
+  el.style.left=(sx*r.width)+"px"; el.style.top=(sy*r.height)+"px";
+  boxlayer.appendChild(el);
+  const move=me=>{ const w=(me.clientX-r.left)-(sx*r.width), h=(me.clientY-r.top)-(sy*r.height);
+    el.style.width=Math.abs(w)+"px"; el.style.height=Math.abs(h)+"px";
+    el.style.left=((w<0?me.clientX-r.left:sx*r.width))+"px"; el.style.top=((h<0?me.clientY-r.top:sy*r.height))+"px"; };
+  const up=async me=>{ document.removeEventListener("mousemove",move); document.removeEventListener("mouseup",up); drawing=false;
+    const ex=(me.clientX-r.left)/r.width, ey=(me.clientY-r.top)/r.height;
+    if(Math.abs(ex-sx)<0.015||Math.abs(ey-sy)<0.015){ el.remove(); return; }
+    regionCount++; const num=regionCount;
+    el.dataset.num=num; el.innerHTML=`<span class="tag">${num}</span>`;
+    const box={x1:Math.min(sx,ex),y1:Math.min(sy,ey),x2:Math.max(sx,ex),y2:Math.max(sy,ey),image_id:imageId,prescription_id:prescriptionId};
+    addPlaceholder(num);
+    try{ const v=await MS.post("/api/user/manual-region", box); renderRegion(num, v, el); }
+    catch(err){ updateCard(num, `<div class="medcard bad"><b>Region ${num}</b><p class="muted">${MS.esc(err.message)}</p></div>`); el.classList.add("bad"); }
+  };
+  document.addEventListener("mousemove",move); document.addEventListener("mouseup",up);
+});
+
+function addPlaceholder(num){
+  resultsEmpty.style.display="none";
+  const div=document.createElement("div"); div.id="card-"+num; div.innerHTML=`<div class="medcard"><b>Region ${num}</b> <span class="spinner"></span> reading…</div>`;
+  resultsBody.appendChild(div);
+}
+function updateCard(num, html){ const c=document.getElementById("card-"+num); if(c) c.innerHTML=html; }
+
+function renderRegion(num, v, boxEl){
+  const tone = v.status==="ok"?"ok":v.status==="unsure"?"warn":"bad";
+  boxEl.classList.add(tone);
+  let inner="";
+  if(v.best){
+    const s=v.best.score;
+    const alts=(v.alternatives||[]).length
+      ? `<details class="alts"><summary>Not this? See ${v.alternatives.length} option(s)</summary>
+          ${v.alternatives.map(a=>`<div class="match"><span class="name">${MS.esc(a.name)}</span><span class="pct">${a.score}%</span>
+            <div style="grid-column:1/-1"><button class="btn ghost sm pickalt" data-num="${num}" data-name="${MS.esc(a.name)}">Use this instead</button></div></div>`).join("")}</details>`:"";
+    inner=`<div class="medcard ${tone}" data-num="${num}">
+        <div class="top"><span class="badge ${tone}">${num}</span><h3>${MS.esc(v.best.name)}</h3>
+          <span class="pct" style="margin-left:auto">${s}% match</span></div>
+        ${v.message?`<p class="muted" style="font-size:13px;margin:6px 0">⚠️ ${MS.esc(v.message)}</p>`:''}
+        <p class="muted" style="font-size:12px;margin:6px 0">read: &ldquo;${MS.esc(v.raw_text)}&rdquo;</p>
+        <button class="btn sm details" data-name="${MS.esc(v.best.name)}">What is this? &rarr;</button>
+        ${alts}<div class="detailSlot"></div></div>`;
+  } else if(v.status==="no_text"){
+    inner=`<div class="medcard bad" data-num="${num}"><div class="top"><span class="badge bad">${num}</span><h3>Couldn't read this</h3></div>
+      <p class="muted" style="font-size:13px;margin:6px 0">${MS.esc(v.message)}</p></div>`;
+  } else {
+    const guesses=(v.alternatives||[]).length
+      ? `<p class="muted" style="font-size:13px;margin:8px 0 2px">Closest guesses (unconfirmed):</p>
+         ${v.alternatives.map(a=>`<div class="match"><span class="name">${MS.esc(a.name)}</span><span class="pct">${a.score}%</span>
+           <div style="grid-column:1/-1"><button class="btn ghost sm pickalt" data-num="${num}" data-name="${MS.esc(a.name)}">This one</button></div></div>`).join("")}`:"";
+    inner=`<div class="medcard bad" data-num="${num}"><div class="top"><span class="badge bad">${num}</span><h3>Not sure</h3></div>
+      <p class="muted" style="font-size:13px;margin:6px 0">${MS.esc(v.message)}</p>
+      <p class="muted" style="font-size:12px;margin:6px 0">read: &ldquo;${MS.esc(v.raw_text)}&rdquo;</p>${guesses}<div class="detailSlot"></div></div>`;
+  }
+  updateCard(num, inner);
+  wire(num);
+}
+
+function wire(num){
+  const card=document.querySelector(`#card-${num} .medcard`); if(!card) return;
+  card.addEventListener("mouseenter",()=>toggleBox(num,true));
+  card.addEventListener("mouseleave",()=>toggleBox(num,false));
+  card.querySelectorAll(".details").forEach(b=>b.addEventListener("click",()=>showDetails(card,b.dataset.name)));
+  card.querySelectorAll(".pickalt").forEach(b=>b.addEventListener("click",()=>showDetails(card,b.dataset.name)));
+}
+function toggleBox(num,on){ const b=boxlayer.querySelector(`.detbox[data-num="${num}"]`); if(b) b.classList.toggle("active",on); }
+
+async function showDetails(card, name){
+  let slot=card.querySelector(".detailSlot");
+  if(!slot){ slot=document.createElement("div"); slot.className="detailSlot"; card.appendChild(slot); }
+  slot.innerHTML='<div class="diag info" style="margin-top:10px"><span class="spinner"></span> Fetching details…</div>';
+  try{
+    await MS.post("/api/user/confirm",{medicine:name,context:"upload",query:name});
+    const d=await MS.get("/api/user/medicine-info?name="+encodeURIComponent(name));
+    const i=d.info||{};
+    const field=(l,v)=> v?`<p style="margin:6px 0"><b>${l}:</b> <span class="muted">${MS.esc(v).slice(0,600)}</span></p>`:"";
+    const links=(d.buy_links||[]).map(l=>`<a class="btn ghost sm" href="${l.url}" target="_blank" rel="noopener">${l.pharmacy}</a>`).join(" ");
+    const subs=(i.substitutes&&i.substitutes.length)?`<p style="margin:10px 0 4px"><b>Cheaper substitutes:</b></p><div>${i.substitutes.slice(0,8).map(s=>`<span class="tok">${MS.esc(s.name)}${s.price!=null?` · ₹${s.price}`:''}</span>`).join("")}</div>`:"";
+    const saving=(i.savings&&i.cheapest)?`<div class="saving"><div class="big">Save ${i.savings.percent}%</div><div class="sub">Same formula: <b>${MS.esc(i.cheapest.name)}</b> at <span class="price-tag">₹${i.cheapest.price}</span> <span class="price-old">₹${i.price}</span> — save <b>₹${i.savings.amount}</b>.</div></div>`:"";
+    slot.innerHTML=`<div class="diag info" style="margin-top:10px">
+      ${i.price!=null?`<p style="margin:4px 0"><b>Price:</b> <span class="price-tag">₹${i.price}</span></p>`:''}${saving}
+      ${i.composition?`<p style="margin:4px 0"><b>What's in it:</b> <span class="mono">${MS.esc(i.composition)}</span></p>`:''}
+      ${field("Used for",i.uses)}${field("Side effects",i.side_effects)}${field("Warnings",i.warnings)}
+      ${(!i.uses&&!i.side_effects)?`<p class="muted" style="font-size:12px">Uses/side-effects come from public labels for the active ingredient${i.salts&&i.salts.length?` (${MS.esc(i.salts.join(', '))})`:''}; none returned — confirm with a pharmacist.</p>`:''}
+      ${subs}<p style="margin:10px 0 4px"><b>Where to buy</b></p><div style="display:flex;gap:8px;flex-wrap:wrap">${links}</div></div>`;
+  }catch(err){ slot.innerHTML='<div class="diag warn">'+MS.esc(err.message)+'</div>'; }
+}
+
+// fallback: read the whole page (old behaviour)
+document.getElementById("wholeBtn").addEventListener("click", async ()=>{
+  if(!currentFile) return;
+  resultsBody.innerHTML='<div class="medcard"><span class="spinner"></span> Reading the whole page…</div>';
+  try{
+    const fd=new FormData(); fd.append("file", currentFile);
+    const data=await (await fetch("/api/user/upload",{method:"POST",body:fd})).json();
+    boxlayer.innerHTML=""; regionCount=0; resultsBody.innerHTML="";
+    (data.detections||[]).forEach((det,idx)=>{
+      regionCount++; const num=regionCount;
+      const v={status:det.best.score>=82?"ok":det.best.score>=68?"unsure":"bad",best:det.best,alternatives:det.alternatives,raw_text:det.line_text,message:det.best.score<82?"Auto-read from the whole page — please verify.":""};
+      addPlaceholder(num);
+      const el=document.createElement("div"); el.className="detbox"; el.dataset.num=num;
+      if(det.box&&(det.box.w||det.box.h)&&imgW){ const s=preview.clientWidth/imgW, sh=preview.clientHeight/imgH;
+        el.style.left=(det.box.x*s)+"px";el.style.top=(det.box.y*sh)+"px";el.style.width=(det.box.w*s)+"px";el.style.height=(det.box.h*sh)+"px";
+        el.innerHTML=`<span class="tag">${num}</span>`; boxlayer.appendChild(el); }
+      renderRegion(num, v, el);
+    });
+    if(!(data.detections||[]).length) resultsBody.innerHTML='<div class="medcard bad">No medicines confidently matched on the whole page. Try boxing them individually.</div>';
+  }catch(err){ MS.flash(err.message); }
+});
+</script>
+{% endblock %}

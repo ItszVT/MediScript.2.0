@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% from "user/_nav.html" import usernav %}
+{% block title %}Health trends — MediScript{% endblock %}
+{% block portaltag %}<small>· user</small>{% endblock %}
+{% block nav %}{{ usernav('trends') }}{% endblock %}
+{% block content %}
+<p class="eyebrow">Trends &amp; news</p>
+<h1>Health &amp; medicine, right now</h1>
+<p class="muted">Real headlines from WHO, MedlinePlus (NIH) and CDC, plus what's actually
+in demand on MediScript. No fabricated statistics, no Google-Trends guesswork.</p>
+
+<div class="card" style="margin-top:16px">
+  <p class="eyebrow">Latest health &amp; medicine news</p>
+  <div id="news" class="newsgrid"><span class="spinner"></span> Loading the latest…</div>
+</div>
+
+<div class="grid cols-2" style="margin-top:20px;align-items:start">
+  <div class="card"><p class="eyebrow">Most in-demand on MediScript · all-time</p>
+    <div id="trends"><span class="spinner"></span></div></div>
+  <div class="card"><p class="eyebrow">What you've searched</p>
+    <div id="mine"><span class="spinner"></span></div></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+function srcClass(s){ s=(s||'').toLowerCase(); return ['who','fda','cdc','medlineplus'].includes(s)?s:'medlineplus'; }
+MS.get("/api/user/health-news").then(d=>{
+  const n=d.news||[];
+  document.getElementById("news").innerHTML = n.length
+    ? n.map(x=>`<a class="newscard ${srcClass(x.source)}" href="${x.url}" target="_blank" rel="noopener">
+        <div class="src">${MS.esc(x.source)}${x.date?' · '+MS.esc(x.date.slice(0,16)):''}</div>
+        <h4>${MS.esc(x.title)}</h4>
+        ${x.summary?`<p>${MS.esc(x.summary)}</p>`:''}</a>`).join("")
+    : '<span class="muted">News needs outbound network — it populates on your running server.</span>';
+});
+MS.get("/api/chemist/analytics").then(b=>{
+  const t=b.top_demand||[];
+  document.getElementById("trends").innerHTML = t.length
+    ? t.map((x,i)=>`<div class="match"><span class="name">${i+1}. ${MS.esc(x.medicine)}</span><span class="pct">${x.count}</span>
+        <div class="bar"><i style="width:${Math.round(100*x.count/t[0].count)}%"></i></div></div>`).join("")
+    : '<span class="muted">No demand recorded yet. As medicines are confirmed and searched, this fills in.</span>';
+}).catch(()=>{ document.getElementById("trends").innerHTML='<span class="muted">Available once the platform is used.</span>'; });
+MS.get("/api/user/analytics").then(a=>{
+  const s=a.most_searched||[];
+  document.getElementById("mine").innerHTML = s.length
+    ? s.map(x=>`<div class="match"><span class="name">${MS.esc(x.query)}</span><span class="pct">${x.count}×</span></div>`).join("")
+    : '<span class="muted">Search a medicine and it shows up here.</span>';
+});
+</script>
+{% endblock %}

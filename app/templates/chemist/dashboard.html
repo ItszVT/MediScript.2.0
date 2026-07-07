@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% from "chemist/_nav.html" import chemistnav %}
+{% block title %}Pharmacy dashboard — MediScript{% endblock %}
+{% block bodyclass %}chemist{% endblock %}
+{% block portaltag %}<small>· chemist</small>{% endblock %}
+{% block nav %}{{ chemistnav('home') }}{% endblock %}
+{% block content %}
+<p class="eyebrow">{{ user.pharmacy_name or 'Your pharmacy' }}</p>
+<h1>Operations overview</h1>
+<p class="muted">Live inventory health and all-time demand at a glance.</p>
+
+<div class="grid" id="invTiles" style="margin-top:16px;grid-template-columns:repeat(5,1fr)"><span class="muted">Loading inventory…</span></div>
+
+<div class="grid cols-2" style="margin-top:20px;align-items:start">
+  <div class="card"><p class="eyebrow">Prediction accuracy · all-time</p>
+    <div id="acc"><span class="spinner"></span></div></div>
+  <div class="card"><p class="eyebrow">Stock fulfilment</p>
+    <div id="fulfil"><span class="spinner"></span></div></div>
+</div>
+
+<div class="grid cols-2" style="margin-top:20px;align-items:start">
+  <a class="card" href="/chemist/upload" style="text-decoration:none;color:inherit">
+    <h3>℞ Dispense from a prescription</h3>
+    <p class="muted">Read a script and see live availability for each medicine.</p></a>
+  <a class="card" href="/chemist/demand" style="text-decoration:none;color:inherit">
+    <h3>📈 Review demand &amp; restock</h3>
+    <p class="muted">See what patients need that you don't stock.</p></a>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+Promise.all([MS.get("/api/chemist/inventory"), MS.get("/api/chemist/analytics")]).then(([inv,an])=>{
+  const s=inv.stats;
+  document.getElementById("invTiles").innerHTML=`
+    <div class="stat accent"><div class="n">${s.total_items}</div><div class="l">Items in inventory</div></div>
+    <div class="stat"><div class="n">₹${(s.total_value||0).toLocaleString('en-IN')}</div><div class="l">Stock value</div></div>
+    <div class="stat ${s.low_stock?'warn':''}"><div class="n">${s.low_stock}</div><div class="l">Low stock</div></div>
+    <div class="stat ${s.out_of_stock?'bad':''}"><div class="n">${s.out_of_stock}</div><div class="l">Out of stock</div></div>
+    <div class="stat ${(s.near_expiry||s.expired)?'warn':''}"><div class="n">${(s.near_expiry||0)+(s.expired||0)}</div><div class="l">Expiring ≤90d</div></div>`;
+  const a=an.accuracy;
+  document.getElementById("acc").innerHTML = a.total
+    ? `<div class="stat good" style="border:none;padding:0"><div class="n">${a.accuracy}%</div><div class="l">${a.yes}/${a.total} predictions confirmed correct</div></div>`
+    : '<span class="muted">No predictions confirmed yet.</span>';
+  const f=an.stock;
+  document.getElementById("fulfil").innerHTML = f.total_checks
+    ? `<div class="stat" style="border:none;padding:0"><div class="n">${f.fulfillment_rate}%</div><div class="l">${f.in_stock}/${f.total_checks} requests met from stock</div></div>`
+    : '<span class="muted">No stock checks yet.</span>';
+});
+</script>
+{% endblock %}

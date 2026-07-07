@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% from "chemist/_nav.html" import chemistnav %}
+{% block title %}Business analytics — MediScript{% endblock %}
+{% block bodyclass %}chemist{% endblock %}
+{% block portaltag %}<small>· chemist</small>{% endblock %}
+{% block nav %}{{ chemistnav('analytics') }}{% endblock %}
+{% block head %}<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>{% endblock %}
+{% block content %}
+<p class="eyebrow">Analytics · all-time</p>
+<h1>Business analytics</h1>
+<p class="muted">Every metric persists in the database and accumulates across sessions.</p>
+
+<div class="grid cols-4" id="tiles" style="margin-top:16px"><span class="muted">Loading…</span></div>
+
+<div class="grid cols-2" style="margin-top:20px;align-items:start">
+  <div class="card"><p class="eyebrow">Monthly demand</p><canvas id="monthly" height="150"></canvas>
+    <p class="muted" id="mEmpty" style="display:none">No demand yet.</p></div>
+  <div class="card"><p class="eyebrow">Stock outcome mix</p><canvas id="mix" height="150"></canvas>
+    <p class="muted" id="xEmpty" style="display:none">No stock checks yet.</p></div>
+</div>
+
+<div class="card" style="margin-top:20px"><p class="eyebrow">Top restock requests</p>
+  <table><thead><tr><th>Medicine</th><th>Reason</th><th>Requests</th></tr></thead><tbody id="restock"></tbody></table>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+MS.get("/api/chemist/analytics").then(a=>{
+  const f=a.stock, acc=a.accuracy;
+  document.getElementById("tiles").innerHTML=`
+    <div class="stat good"><div class="n">${acc.accuracy??'—'}${acc.accuracy!=null?'%':''}</div><div class="l">Prediction accuracy (${acc.total})</div></div>
+    <div class="stat"><div class="n">${f.total_checks}</div><div class="l">Stock checks</div></div>
+    <div class="stat good"><div class="n">${f.fulfillment_rate??'—'}${f.fulfillment_rate!=null?'%':''}</div><div class="l">Fulfilment rate</div></div>
+    <div class="stat bad"><div class="n">${f.needs_restock}</div><div class="l">Unmet requests</div></div>`;
+
+  const m=a.monthly_demand||[];
+  if(!m.length) document.getElementById("mEmpty").style.display="block";
+  else new Chart(document.getElementById("monthly"),{type:"line",
+    data:{labels:m.map(x=>x.month),datasets:[{data:m.map(x=>x.count),borderColor:"#3FB2B0",backgroundColor:"rgba(63,178,176,.15)",fill:true,tension:.3}]},
+    options:{plugins:{legend:{display:false}},scales:{y:{beginAtZero:true,ticks:{precision:0}}}}});
+
+  const bs=f.by_status||{}; const keys=Object.keys(bs);
+  if(!keys.length) document.getElementById("xEmpty").style.display="block";
+  else new Chart(document.getElementById("mix"),{type:"doughnut",
+    data:{labels:keys.map(k=>k.replace('_',' ')),datasets:[{data:keys.map(k=>bs[k]),
+      backgroundColor:["#5FCf9f","#B4691F","#C4453C"]}]},options:{plugins:{legend:{position:"bottom"}}}});
+
+  document.getElementById("restock").innerHTML = (a.top_restock||[]).length
+    ? a.top_restock.map(r=>`<tr><td>${MS.esc(r.medicine)}</td><td><span class="badge ${r.reason==='not_stocked'?'bad':'warn'}">${r.reason.replace('_',' ')}</span></td><td>${r.count}</td></tr>`).join("")
+    : '<tr><td colspan="3" class="muted">No restock requests yet.</td></tr>';
+});
+</script>
+{% endblock %}

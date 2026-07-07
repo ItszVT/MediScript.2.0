@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% from "chemist/_nav.html" import chemistnav %}
+{% block title %}Demand — MediScript{% endblock %}
+{% block bodyclass %}chemist{% endblock %}
+{% block portaltag %}<small>· chemist</small>{% endblock %}
+{% block nav %}{{ chemistnav('demand') }}{% endblock %}
+{% block content %}
+<p class="eyebrow">Demand · all-time</p>
+<h1>What people need</h1>
+<p class="muted">Aggregated, anonymous demand from confirmed prescriptions and searches. Restock
+requests are raised automatically when a demanded medicine isn't in your stock.</p>
+
+<div class="grid cols-2" style="margin-top:16px;align-items:start">
+  <div class="card"><p class="eyebrow">Top demanded medicines</p><div id="demand"><span class="spinner"></span></div></div>
+  <div class="card"><p class="eyebrow">Pending restock requests</p><div id="restock"><span class="spinner"></span></div></div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+async function refresh(){
+  const [an,rs]=await Promise.all([MS.get("/api/chemist/analytics"),MS.get("/api/chemist/restock")]);
+  const t=an.top_demand||[];
+  document.getElementById("demand").innerHTML = t.length
+    ? t.map((x,i)=>`<div class="match"><span class="name">${i+1}. ${MS.esc(x.medicine)}</span><span class="pct">${x.count}</span><div class="bar"><i style="width:${Math.round(100*x.count/t[0].count)}%"></i></div></div>`).join("")
+    : '<span class="muted">No demand recorded yet.</span>';
+  const p=rs.pending||[];
+  document.getElementById("restock").innerHTML = p.length
+    ? p.map(x=>`<div class="match"><span class="name">${MS.esc(x.medicine)} <span class="badge ${x.reason==='not_stocked'?'bad':'warn'}">${x.reason.replace('_',' ')}</span></span>
+        <span class="pct">${x.count}×</span>
+        <div style="grid-column:1/-1"><button class="btn ghost sm res" data-name="${MS.esc(x.medicine)}">Mark restocked</button></div></div>`).join("")
+    : '<span class="muted">Nothing pending — you\'re covering demand.</span>';
+  document.querySelectorAll(".res").forEach(b=>b.addEventListener("click", async ()=>{
+    await MS.post("/api/chemist/restock/resolve",{medicine:b.dataset.name}); MS.flash("Marked restocked."); refresh(); }));
+}
+refresh();
+</script>
+{% endblock %}
